@@ -2,6 +2,7 @@
 
 갤럭시 노트9를 휴대용 라우터처럼 쓸 때 켜 두는 가로 대기화면 앱입니다.
 시계·달력 화면과, 옆으로 넘기면 나오는 통신 정보 화면 두 장으로 구성됩니다.
+핫스팟에 SOCKS5 프록시를 함께 열고, 노트북의 모든 트래픽을 이 프록시로 보내는 Windows 연결 프로그램(`pc/`)도 들어 있습니다.
 
 ![시계·달력 화면](docs/screenshot-clock.png)
 
@@ -21,7 +22,7 @@
 - **한도 설정**: 월 데이터 한도, 사용량 기준일(매월 1~31일), 이번 달 사용량 보정(통신사 집계에 맞추기)
 - **잠금화면 위 표시**: 폰을 잠근 채로 앱이 보이고, 앱을 나가면 잠금화면으로 돌아갑니다. 왼쪽 아래 자물쇠 아이콘으로 잠금 상태를 표시합니다(회색 닫힘 = 잠김, 주황 열림 = 풀림).
 - **자동 실행**: 핫스팟이 켜진 상태에서 충전기를 꽂으면 앱이 자동으로 뜹니다.
-- **SOCKS5 프록시**: 핫스팟이 켜져 있으면 `192.168.43.1:1080`에 프록시가 열립니다. 이 프록시를 거친 트래픽은 안드로이드에서 테더링이 아니라 앱 자신의 데이터로 집계됩니다. 아래 [SOCKS5 프록시](#socks5-프록시) 참고.
+- **SOCKS5 프록시**: 핫스팟을 켜면 앱 화면 없이도 `192.168.43.1:1080`에 프록시가 열리고, 끄면 함께 꺼집니다. 이 프록시를 거친 트래픽은 안드로이드에서 테더링이 아니라 앱 자신의 데이터로 집계됩니다. 노트북용 연결 프로그램은 노트북 전체를 이 프록시로 보내고 연결 상태를 보여 줍니다. 아래 [SOCKS5 프록시](#socks5-프록시) 참고.
 - **번인 완화**: 검은 배경, 1분마다 화면 전체를 몇 픽셀씩 이동
 
 ## 확인한 환경
@@ -44,7 +45,7 @@ JDK 17 이상과 Android SDK(compileSdk 35)가 필요합니다. Gradle은 실행
 
 ```sh
 java -ea src/main/java/com/routerviewer/Calc.java     # 밴드 계산, 사용량 기준일, 접속 기기 집계 → "Calc OK"
-java -ea src/main/java/com/routerviewer/Socks5.java   # SOCKS5 연결·중계·UDP 중계·오류 응답 → "Socks5 OK"
+java -ea src/main/java/com/routerviewer/Socks5.java   # SOCKS5 연결·중계·UDP 중계·오류 응답·시간 제한·연결 수 제한·일괄 종료 → "Socks5 OK"
 ```
 
 ## 설치와 권한
@@ -78,8 +79,8 @@ adb shell appops set com.routerviewer WRITE_SETTINGS allow
 
 - 앱을 띄운 뒤 전원 버튼으로 한 번 잠그고 다시 켜 두면, 누가 만져도 앱 밖으로 나가는 순간 잠금화면이 나옵니다.
 - 노트9가 다른 Wi-Fi에 붙어 있으면 핫스팟 트래픽이 LTE가 아니라 그 Wi-Fi로 나가서 사용량과 속도에 잡히지 않습니다. 라우터로 쓸 때는 Wi-Fi를 꺼 두세요.
-- 삼성 배터리 관리가 앱을 절전 상태로 돌리면 자동 실행이 안 될 수 있습니다. 설정 › 배터리 › 백그라운드 사용 제한에서 절전 예외 앱으로 지정하세요.
-- 설정에서 앱을 "강제 중지"하면 다시 직접 실행하기 전까지 자동 실행이 동작하지 않습니다.
+- 삼성 배터리 관리가 앱을 절전 상태로 돌리면 자동 실행과 프록시 자동 시작이 안 될 수 있습니다. 설정 › 배터리 › 백그라운드 사용 제한에서 절전 예외 앱으로 지정하세요.
+- 설정에서 앱을 "강제 중지"하거나 새 버전을 설치하면, 다시 직접 실행하거나 핫스팟을 껐다 켜기 전까지 자동 실행과 프록시가 동작하지 않습니다.
 
 ## SOCKS5 프록시
 
@@ -114,7 +115,7 @@ adb shell appops set com.routerviewer WRITE_SETTINGS allow
 
 `RouterViewerPC.exe`, `sing-box.exe`, `config.json`은 같은 폴더에 있어야 합니다.
 
-창 위쪽 상태는 다음과 같습니다. 5초마다 폰 프록시 응답을, 15초마다(문제가 있으면 5초마다) `connectivitycheck.gstatic.com`에 실제 요청을 보내 인터넷까지 확인합니다. 인터넷 확인에 하루 수 MB 정도의 데이터가 듭니다.
+창 위쪽 상태는 다음과 같습니다. 5초마다 폰 프록시 응답과 노트북의 인터넷 경로가 TUN(sing-box의 가상 네트워크 카드)을 지나는지를, 15초마다(문제가 있으면 5초마다) `connectivitycheck.gstatic.com`에 실제 요청을 보내 인터넷까지 확인합니다. 인터넷 확인에 하루 수 MB 정도의 데이터가 듭니다.
 
 | 상태 | 뜻 |
 |---|---|
@@ -123,7 +124,7 @@ adb shell appops set com.routerviewer WRITE_SETTINGS allow
 | 폰 프록시 응답 없음 | 핫스팟 연결이 끊겼거나 폰의 프록시가 꺼짐 |
 | 프록시를 거치지 않음 | sing-box는 돌지만 노트북 트래픽이 TUN으로 가지 않음 (다른 VPN 등) |
 
-PC 프로그램이 어떤 이유로든 죽으면 sing-box도 함께 종료됩니다.
+PC 프로그램이 어떤 이유로든 죽으면 sing-box도 함께 종료되고 원래 핫스팟 연결로 돌아옵니다. 이 보호를 설정하지 못하면 기록 칸에 그 사실이 남습니다.
 
 켜져 있는 동안 폰 프록시가 꺼지면 노트북 인터넷이 끊깁니다(핫스팟으로 몰래 새지 않음). `ping`은 TCP·UDP가 아니라서 프록시를 지나지 못해 실패하지만, 인터넷 사용에는 지장이 없습니다. 설정은 `pc/config.json`에 있습니다.
 
@@ -163,15 +164,15 @@ Windows 기본 프록시 설정은 SOCKS5를 제대로 지원하지 않으므로
 src/main/java/com/routerviewer/
   MainActivity.java      두 화면, 데이터 수집, 핫스팟 버튼, 잠금 아이콘
   SettingsActivity.java  한도 설정 화면
-  AutoStartReceiver.java 충전기 연결 시 자동 실행
-  ProxyService.java      핫스팟 주소에서 SOCKS5 프록시 실행 (포그라운드 서비스)
+  AutoStartReceiver.java 충전기 연결 시 자동 실행, 핫스팟 켜짐 시 프록시 시작
+  ProxyService.java      핫스팟 주소에서 SOCKS5 프록시 실행, 핫스팟을 따라 다시 열기·종료 (포그라운드 서비스)
   Socks5.java            SOCKS5 서버 (안드로이드 비의존, 자체 점검 포함)
   RingView.java          사용량 원형 그래프
   Calc.java              밴드·기준일·접속 기기 계산 (안드로이드 비의존, 자체 점검 포함)
 src/main/res/            레이아웃, 아이콘, 색상
 pc/
   config.json            노트북 전체를 폰 프록시로 보내는 sing-box 설정
-  RouterViewerPC.cs      연결·끊기 창 프로그램 (sing-box 실행·종료, 폰 프록시 확인)
+  RouterViewerPC.cs      연결·끊기 창 프로그램 (sing-box 실행·종료, 폰 프록시·TUN 경로·인터넷 확인, 트레이)
   app.manifest           관리자 권한 요청, 고해상도 화면 대응
   icon.ico               폰 앱과 같은 아이콘
   build.bat              RouterViewerPC.exe 빌드
