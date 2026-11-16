@@ -31,8 +31,9 @@ class RouterViewerPC : Form
     readonly Button toggle = new Button { Location = new Point(20, 164), Size = new Size(380, 46), FlatStyle = FlatStyle.Flat, Font = new Font("Malgun Gothic", 11.5f, FontStyle.Bold), Cursor = Cursors.Hand };
     readonly TextBox log = new TextBox { Location = new Point(20, 250), Size = new Size(380, 90), Multiline = true, ReadOnly = true, BorderStyle = BorderStyle.None, BackColor = Card, ForeColor = Dim, Font = new Font("Consolas", 8.5f), ScrollBars = ScrollBars.Vertical };
     readonly Timer timer = new Timer { Interval = 5000 };
+    readonly NotifyIcon tray = new NotifyIcon();
     Process box;
-    bool stopping, closing, checking;
+    bool stopping, closing, checking, exiting, hintShown;
 
     RouterViewerPC()
     {
@@ -57,12 +58,33 @@ class RouterViewerPC : Form
         ResumeLayout(false);
         PerformLayout();
 
+        var menu = new ContextMenuStrip();
+        menu.Items.Add("열기", null, (s, e) => Restore());
+        menu.Items.Add("종료", null, (s, e) => { exiting = true; Close(); });
+        tray.Icon = Icon;
+        tray.ContextMenuStrip = menu;
+        tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) Restore(); };
+        tray.Visible = true;
+
         log.HandleCreated += (s, e) => SetWindowTheme(log.Handle, "DarkMode_Explorer", null);
         SetStatus(Off, "연결 안 됨", "아래 버튼을 눌러 연결하세요");
         SetButton(false);
         toggle.Click += (s, e) => { if (box == null) Connect(); else Disconnect(); };
         Shown += (s, e) => Connect();
-        FormClosing += (s, e) => { closing = true; Disconnect(); };
+        FormClosing += (s, e) =>
+        {
+            if (!exiting && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                Hide();
+                if (!hintShown) tray.ShowBalloonTip(3000, "Router Viewer PC", "트레이에서 계속 실행됩니다. 끄려면 아이콘을 우클릭해 종료하세요.", ToolTipIcon.None);
+                hintShown = true;
+                return;
+            }
+            closing = true;
+            Disconnect();
+            tray.Visible = false;
+        };
         timer.Tick += (s, e) => Check();
         timer.Start();
     }
@@ -74,11 +96,19 @@ class RouterViewerPC : Form
         DwmSetWindowAttribute(Handle, 20, ref dark, 4);
     }
 
+    void Restore()
+    {
+        Show();
+        WindowState = FormWindowState.Normal;
+        Activate();
+    }
+
     void SetStatus(Color c, string head, string sub)
     {
         dot.ForeColor = c;
         title.Text = head;
         detail.Text = sub;
+        tray.Text = "Router Viewer PC: " + head;
     }
 
     void SetButton(bool connected)
