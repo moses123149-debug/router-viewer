@@ -43,7 +43,7 @@ JDK 17 이상과 Android SDK(compileSdk 35)가 필요합니다. Gradle은 실행
 
 ```sh
 java -ea src/main/java/com/routerviewer/Calc.java     # 밴드 계산, 사용량 기준일, 접속 기기 집계 → "Calc OK"
-java -ea src/main/java/com/routerviewer/Socks5.java   # SOCKS5 연결·중계·오류 응답 → "Socks5 OK"
+java -ea src/main/java/com/routerviewer/Socks5.java   # SOCKS5 연결·중계·UDP 중계·오류 응답 → "Socks5 OK"
 ```
 
 ## 설치와 권한
@@ -100,7 +100,21 @@ adb shell appops set com.routerviewer WRITE_SETTINGS allow
 - 핫스팟 주소에서만 열리므로 핫스팟에 붙은 기기만 쓸 수 있습니다. 인증은 없습니다.
 - 도메인 이름 조회(DNS)도 폰이 합니다.
 
-**노트북 설정**
+**노트북 전체를 프록시로 보내기 (권장)**
+
+[sing-box](https://github.com/SagerNet/sing-box)가 노트북에 가상 네트워크 카드를 만들어, 모든 프로그램의 TCP·UDP·DNS를 폰 프록시로 보냅니다. 프로그램마다 설정할 필요가 없습니다.
+
+1. [sing-box 릴리스](https://github.com/SagerNet/sing-box/releases)에서 `sing-box-<버전>-windows-amd64.zip`을 받아 `sing-box.exe`를 `pc/` 폴더에 넣습니다 (1.14.4에서 확인).
+2. `pc/build.bat`을 실행하면 `pc/RouterViewerPC.exe`가 만들어집니다. Windows에 기본으로 들어 있는 .NET Framework 컴파일러를 쓰므로 따로 설치할 것은 없습니다.
+3. 노트북을 핫스팟에 연결하고 폰에서 앱을 띄워 프록시가 켜진 것을 확인합니다.
+4. `RouterViewerPC.exe`를 실행합니다. 관리자 권한을 요청하고, 폰 프록시가 응답하면 바로 연결합니다. 창의 버튼으로 끊거나 다시 연결할 수 있고, 아래쪽에 sing-box 기록이 나옵니다.
+5. 창을 닫으면 연결을 끊고 원래 핫스팟 연결로 돌아옵니다.
+
+`RouterViewerPC.exe`, `sing-box.exe`, `config.json`은 같은 폴더에 있어야 합니다.
+
+켜져 있는 동안 폰 프록시가 꺼지면 노트북 인터넷이 끊깁니다(핫스팟으로 몰래 새지 않음). `ping`은 TCP·UDP가 아니라서 프록시를 지나지 못해 실패하지만, 인터넷 사용에는 지장이 없습니다. 설정은 `pc/config.json`에 있습니다.
+
+**프로그램별로 지정하기**
 
 - Firefox: 설정 › 네트워크 설정 › 수동 프록시 설정에서 SOCKS 호스트 `192.168.43.1`, 포트 `1080`, SOCKS v5를 고르고 "SOCKS v5 사용 시 DNS 프록시"를 체크
 - Chrome / Edge: 실행 옵션으로 지정
@@ -116,7 +130,8 @@ Windows 기본 프록시 설정은 SOCKS5를 제대로 지원하지 않으므로
 
 **한계**
 
-- TCP 연결(CONNECT)만 처리합니다. UDP(QUIC, 게임, 화상통화 등)와 프록시 설정을 따르지 않는 프로그램은 핫스팟으로 직접 나갑니다.
+- TCP 연결(CONNECT)과 UDP 중계(UDP ASSOCIATE)를 처리합니다. 프로그램별로 지정하는 방식에서는 프록시 설정을 따르지 않는 프로그램과 UDP가 핫스팟으로 직접 나갑니다. 노트북 전체를 보내는 방식에서는 ping(ICMP)만 빠집니다.
+- UDP가 앱 데이터로 집계되는지는 TCP처럼 사용량을 비교해 측정하지는 않았습니다. 같은 앱 소켓으로 내보내므로 같게 집계될 것으로 봅니다.
 - 연결마다 스레드 두 개를 쓰는 단순한 구조라, 브라우저 몇 개 수준을 넘는 대량 연결에는 맞지 않습니다.
 
 ## 제한 사항
@@ -140,6 +155,11 @@ src/main/java/com/routerviewer/
   RingView.java          사용량 원형 그래프
   Calc.java              밴드·기준일·접속 기기 계산 (안드로이드 비의존, 자체 점검 포함)
 src/main/res/            레이아웃, 아이콘, 색상
+pc/
+  config.json            노트북 전체를 폰 프록시로 보내는 sing-box 설정
+  RouterViewerPC.cs      연결·끊기 창 프로그램 (sing-box 실행·종료, 폰 프록시 확인)
+  app.manifest           관리자 권한 요청
+  build.bat              RouterViewerPC.exe 빌드
 ```
 
 추가 라이브러리 없이 Android 기본 API만 사용합니다.

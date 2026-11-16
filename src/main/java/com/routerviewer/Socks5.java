@@ -1,19 +1,25 @@
 package com.routerviewer;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Minimal SOCKS5 server (RFC 1928): no auth, CONNECT only, hostnames resolved on this device.
+ * Minimal SOCKS5 server (RFC 1928): no auth, CONNECT and UDP ASSOCIATE, hostnames resolved on this device.
  * Pure java.net so it can be checked with: java -ea Socks5.java
  */
 final class Socks5 {
@@ -50,6 +56,10 @@ final class Socks5 {
             in.readUnsignedByte();
             String host = readHost(in);
             int port = in.readUnsignedShort();
+            if (cmd == 3) {
+                associate(client, in, out);
+                return;
+            }
             if (cmd != 1) {
                 reply(out, 7);
                 return;
@@ -76,6 +86,67 @@ final class Socks5 {
         }
     }
 
+    /** UDP ASSOCIATE: relays datagrams for as long as the client keeps the control connection open. */
+    private static void associate(Socket client, InputStream in, OutputStream out) throws IOException {
+        InetAddress owner = client.getInetAddress();
+        AtomicReference<SocketAddress> peer = new AtomicReference<>();
+        try (DatagramSocket relay = new DatagramSocket(0, client.getLocalAddress());
+             DatagramSocket remote = new DatagramSocket()) {
+            new Thread(() -> {
+                byte[] buf = new byte[65535];
+                DatagramPacket p = new DatagramPacket(buf, buf.length);
+                try {
+                    while (true) {
+                        p.setLength(buf.length);
+                        relay.receive(p);
+                        if (!p.getAddress().equals(owner)) continue;
+                        peer.set(p.getSocketAddress());
+                        try {
+                            DataInputStream d = new DataInputStream(new ByteArrayInputStream(buf, 0, p.getLength()));
+                            d.readUnsignedShort();
+                            if (d.readUnsignedByte() != 0) continue;
+                            String host = readHost(d);
+                            int port = d.readUnsignedShort();
+                            int off = p.getLength() - d.available();
+                            remote.send(new DatagramPacket(buf, off, p.getLength() - off, InetAddress.getByName(host), port));
+                        } catch (IOException ignored) {
+                        }
+                    }
+                } catch (IOException ignored) {
+                }
+            }).start();
+            new Thread(() -> {
+                byte[] buf = new byte[65535];
+                DatagramPacket p = new DatagramPacket(buf, buf.length);
+                try {
+                    while (true) {
+                        p.setLength(buf.length);
+                        remote.receive(p);
+                        SocketAddress to = peer.get();
+                        if (to == null) continue;
+                        ByteArrayOutputStream b = new ByteArrayOutputStream();
+                        b.write(new byte[] {0, 0, 0});
+                        writeAddress(b, p.getAddress(), p.getPort());
+                        b.write(buf, 0, p.getLength());
+                        relay.send(new DatagramPacket(b.toByteArray(), b.size(), to));
+                    }
+                } catch (IOException ignored) {
+                }
+            }).start();
+            reply(out, 0, relay.getLocalAddress(), relay.getLocalPort());
+            while (in.read() >= 0) {
+            }
+        }
+    }
+
+    private static void writeAddress(ByteArrayOutputStream b, InetAddress a, int port) {
+        byte[] raw = a.getAddress();
+        b.write(raw.length == 4 ? 1 : 4);
+        b.write(raw, 0, raw.length);
+        b.write(port >> 8);
+        b.write(port);
+    }
+
     private static String readHost(DataInputStream in) throws IOException {
         int atyp = in.readUnsignedByte();
         byte[] a;
@@ -93,7 +164,14 @@ final class Socks5 {
     }
 
     private static void reply(OutputStream out, int code) throws IOException {
-        out.write(new byte[] {5, (byte) code, 0, 1, 0, 0, 0, 0, 0, 0});
+        reply(out, code, InetAddress.getByAddress(new byte[4]), 0);
+    }
+
+    private static void reply(OutputStream out, int code, InetAddress bound, int port) throws IOException {
+        ByteArrayOutputStream b = new ByteArrayOutputStream();
+        b.write(new byte[] {5, (byte) code, 0});
+        writeAddress(b, bound, port);
+        out.write(b.toByteArray());
         out.flush();
     }
 
@@ -144,6 +222,22 @@ final class Socks5 {
             byte[] closed = ipv4.clone();
             closed[8] = 0; closed[9] = 1;
             check(roundTrip(proxy, closed, null) == 5, "refused port reported");
+
+            try (DatagramSocket udpEcho = new DatagramSocket(0, lo)) {
+                new Thread(() -> {
+                    byte[] b = new byte[2048];
+                    DatagramPacket p = new DatagramPacket(b, b.length);
+                    try {
+                        while (true) {
+                            p.setLength(b.length);
+                            udpEcho.receive(p);
+                            udpEcho.send(p);
+                        }
+                    } catch (IOException ignored) {
+                    }
+                }).start();
+                udpRoundTrip(proxy, udpEcho.getLocalPort());
+            }
         }
         System.out.println("Socks5 OK");
         System.exit(0);
@@ -165,6 +259,34 @@ final class Socks5 {
                 check(payload.equals(new String(back, StandardCharsets.US_ASCII)), "relay " + payload);
             }
             return rep[1];
+        }
+    }
+
+    private static void udpRoundTrip(ServerSocket proxy, int echoPort) throws IOException {
+        try (Socket s = new Socket(proxy.getInetAddress(), proxy.getLocalPort());
+             DatagramSocket u = new DatagramSocket(0, proxy.getInetAddress())) {
+            DataInputStream in = new DataInputStream(s.getInputStream());
+            OutputStream out = s.getOutputStream();
+            out.write(new byte[] {5, 1, 0});
+            check(in.readUnsignedByte() == 5 && in.readUnsignedByte() == 0, "greeting");
+            out.write(new byte[] {5, 3, 0, 1, 0, 0, 0, 0, 0, 0});
+            byte[] rep = new byte[10];
+            in.readFully(rep);
+            check(rep[1] == 0, "UDP ASSOCIATE accepted");
+            InetAddress relay = InetAddress.getByAddress(new byte[] {rep[4], rep[5], rep[6], rep[7]});
+            int relayPort = ((rep[8] & 0xFF) << 8) | (rep[9] & 0xFF);
+
+            byte[] head = {0, 0, 0, 1, 127, 0, 0, 1, (byte) (echoPort >> 8), (byte) echoPort};
+            byte[] msg = new byte[head.length + 3];
+            System.arraycopy(head, 0, msg, 0, head.length);
+            System.arraycopy("udp".getBytes(StandardCharsets.US_ASCII), 0, msg, head.length, 3);
+            u.setSoTimeout(3000);
+            u.send(new DatagramPacket(msg, msg.length, relay, relayPort));
+            byte[] back = new byte[64];
+            DatagramPacket p = new DatagramPacket(back, back.length);
+            u.receive(p);
+            check(p.getLength() == msg.length, "UDP reply length");
+            for (int i = 0; i < msg.length; i++) check(back[i] == msg[i], "UDP reply byte " + i);
         }
     }
 

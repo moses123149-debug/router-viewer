@@ -1,0 +1,33 @@
+{
+  "log": { "level": "warn" },
+  "dns": {
+    "servers": [
+      { "type": "udp", "tag": "phone-dns", "server": "8.8.8.8", "detour": "phone" }
+    ],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "RouterViewer",
+      "address": ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
+      "auto_route": true,
+      "strict_route": true,
+      "stack": "mixed"
+    }
+  ],
+  "outbounds": [
+    { "type": "socks", "tag": "phone", "server": "192.168.43.1", "server_port": 1080, "version": "5" },
+    { "type": "direct", "tag": "direct" }
+  ],
+  "route": {
+    "rules": [
+      { "action": "sniff" },
+      { "protocol": "dns", "action": "hijack-dns" },
+      { "ip_cidr": ["192.168.43.0/24"], "outbound": "direct" }
+    ],
+    "final": "phone",
+    "auto_detect_interface": true
+  }
+}
