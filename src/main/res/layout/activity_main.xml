@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <ViewFlipper
+        android:id="@+id/flipper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:inAnimation="@android:anim/fade_in"
+        android:outAnimation="@android:anim/fade_out">
+
+        <!-- 1. 시계·달력 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="44dp"
+            android:paddingTop="24dp"
+            android:paddingEnd="44dp"
+            android:paddingBottom="32dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tvDate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/dim"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/tvTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:letterSpacing="-0.03"
+                    android:textColor="@color/fg"
+                    android:textSize="124sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:orientation="horizontal">
+
+                    <LinearLayout style="@style/Pair" android:layout_marginEnd="28dp">
+                        <TextView style="@style/Label" android:text="네트워크" />
+                        <TextView android:id="@+id/tvNet1" style="@style/Value" android:textColor="@color/accent" android:textSize="18sp" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/Pair" android:layout_marginEnd="28dp">
+                        <TextView style="@style/Label" android:text="오늘 사용량" />
+                        <TextView android:id="@+id/tvToday1" style="@style/Value" android:textSize="18sp" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/Pair" android:layout_marginEnd="28dp">
+                        <TextView style="@style/Label" android:text="접속 기기" />
+                        <TextView android:id="@+id/tvDevices1" style="@style/Value" android:textSize="18sp" />
+                    </LinearLayout>
+
+                    <LinearLayout style="@style/Pair">
+                        <TextView style="@style/Label" android:text="배터리" />
+                        <TextView android:id="@+id/tvBattery1" style="@style/Value" android:textSize="18sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="300dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="40dp"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="bottom"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tvCalMonth"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="@color/fg"
+                        android:textSize="22sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvCalYear"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/dim"
+                        android:textSize="16sp" />
+                </LinearLayout>
+
+                <GridLayout
+                    android:id="@+id/calGrid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:columnCount="7" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 2. 통신 정보 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingStart="36dp"
+            android:paddingTop="18dp"
+            android:paddingEnd="36dp"
+            android:paddingBottom="28dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="통신 정보"
+                    android:textColor="@color/fg"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvTime2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="@color/dim"
+                    android:textSize="16sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="10dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/usageCard"
+                    style="@style/Card"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="5">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <FrameLayout
+                            android:layout_width="140dp"
+                            android:layout_height="140dp">
+
+                            <com.routerviewer.RingView
+                                android:id="@+id/ring"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:gravity="center"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/tvPct"
+                                    style="@style/Value"
+                                    android:textColor="@color/accent"
+                                    android:textSize="26sp" />
+
+                                <TextView
+                                    android:id="@+id/tvLimit"
+                                    style="@style/Label"
+                                    android:gravity="center" />
+                            </LinearLayout>
+                        </FrameLayout>
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="20dp"
+                            android:orientation="vertical">
+
+                            <TextView style="@style/Label" android:text="이번 달" />
+                            <TextView android:id="@+id/tvMonth" style="@style/Value" android:textSize="21sp" />
+                            <TextView style="@style/Label" android:layout_marginTop="8dp" android:text="남은 양" />
+                            <TextView android:id="@+id/tvRemain" style="@style/Value" android:textSize="21sp" />
+                            <TextView style="@style/Label" android:layout_marginTop="8dp" android:text="오늘" />
+                            <TextView android:id="@+id/tvToday" style="@style/Value" android:textSize="21sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="bottom"
+                        android:orientation="horizontal">
+
+                        <LinearLayout style="@style/Pair" android:layout_marginEnd="18dp">
+                            <TextView style="@style/Label" android:text="다운로드" />
+                            <TextView android:id="@+id/tvDown" style="@style/Value" android:textSize="18sp" />
+                        </LinearLayout>
+
+                        <LinearLayout style="@style/Pair">
+                            <TextView style="@style/Label" android:text="업로드" />
+                            <TextView android:id="@+id/tvUp" style="@style/Value" android:textSize="18sp" />
+                        </LinearLayout>
+
+                        <Space
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
+
+                        <Button
+                            android:id="@+id/btnLimit"
+                            style="@style/PillButton"
+                            android:text="한도 설정" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    style="@style/Card"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="6">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="bottom"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView android:id="@+id/tvCarrier" style="@style/Label" android:text="전송 방식" />
+                            <TextView
+                                android:id="@+id/tvRat"
+                                style="@style/Value"
+                                android:includeFontPadding="false"
+                                android:textColor="@color/accent"
+                                android:textSize="40sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:gravity="end"
+                            android:orientation="vertical">
+
+                            <TextView style="@style/Label" android:text="주파수 밴드" />
+                            <TextView android:id="@+id/tvBand" style="@style/Value" android:textSize="22sp" />
+                            <TextView android:id="@+id/tvFreq" style="@style/Label" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="10dp"
+                        android:background="@color/line" />
+
+                    <GridLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:columnCount="3">
+
+                        <LinearLayout style="@style/GridPair">
+                            <TextView style="@style/Label" android:text="채널 (EARFCN)" />
+                            <TextView android:id="@+id/tvEarfcn" style="@style/Value" />
+                        </LinearLayout>
+
+                        <LinearLayout style="@style/GridPair">
+                            <TextView style="@style/Label" android:text="대역폭" />
+                            <TextView android:id="@+id/tvBw" style="@style/Value" />
+                        </LinearLayout>
+
+                        <LinearLayout style="@style/GridPair">
+                            <TextView style="@style/Label" android:text="기지국 (PCI)" />
+                            <TextView android:id="@+id/tvPci" style="@style/Value" />
+                        </LinearLayout>
+
+                        <LinearLayout style="@style/GridPair">
+                            <TextView style="@style/Label" android:text="신호 세기 (RSRP)" />
+                            <TextView android:id="@+id/tvRsrp" style="@style/Value" />
+                        </LinearLayout>
+
+                        <LinearLayout style="@style/GridPair">
+                            <TextView style="@style/Label" android:text="신호 품질 (RSRQ)" />
+                            <TextView android:id="@+id/tvRsrq" style="@style/Value" />
+                        </LinearLayout>
+
+                        <LinearLayout style="@style/GridPair">
+                            <TextView style="@style/Label" android:text="잡음비 (SINR)" />
+                            <TextView android:id="@+id/tvSinr" style="@style/Value" />
+                        </LinearLayout>
+                    </GridLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/line" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView style="@style/Label" android:text="접속 기기  " />
+                        <TextView
+                            android:id="@+id/tvDevices2"
+                            style="@style/Value"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:textSize="17sp" />
+
+                        <TextView style="@style/Label" android:text="배터리  " />
+                        <TextView android:id="@+id/tvBattery2" style="@style/Value" android:textSize="17sp" />
+
+                        <Button
+                            android:id="@+id/btnHotspot"
+                            style="@style/PillButton"
+                            android:layout_marginStart="16dp"
+                            android:text="핫스팟 켜기" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </ViewFlipper>
+
+    <ImageView
+        android:id="@+id/lockIcon"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="14dp"
+        android:layout_marginBottom="6dp"
+        android:src="@drawable/ic_lock" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="12dp"
+        android:orientation="horizontal">
+
+        <View
+            android:id="@+id/dot0"
+            android:layout_width="18dp"
+            android:layout_height="4dp"
+            android:layout_marginEnd="8dp" />
+
+        <View
+            android:id="@+id/dot1"
+            android:layout_width="18dp"
+            android:layout_height="4dp" />
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#000000</color>
+    <color name="fg">#F2F2F2</color>
+    <color name="dim">#A8AEB4</color>
+    <color name="card">#111315</color>
+    <color name="line">#2A2E32</color>
+    <color name="outline">#4A5057</color>
+    <color name="dot_off">#5A6066</color>
+    <color name="accent">#FFB454</color>
+    <color name="sunday">#FF8A80</color>
+    <color name="saturday">#82B1FF</color>
+</resources>
