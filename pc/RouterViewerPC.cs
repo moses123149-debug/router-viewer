@@ -166,7 +166,8 @@ class RouterViewerPC : Form
             toggle.Enabled = true;
             return;
         }
-        AssignProcessToJobObject(Job, box.Handle);
+        if (!AssignProcessToJobObject(Job, box.Handle))
+            Append("동반 종료 설정 실패 (오류 " + Marshal.GetLastWin32Error() + "): 이 창이 강제로 꺼지면 sing-box가 남을 수 있습니다");
         box.BeginErrorReadLine();
         online = null;
         SetStatus(Dim, "연결 확인 중...", "폰을 거쳐 인터넷에 연결되는지 확인하는 중");
@@ -304,8 +305,8 @@ class RouterViewerPC : Form
     {
         IntPtr job = CreateJobObject(IntPtr.Zero, null);
         var limits = new JobLimits { LimitFlags = 0x2000 };
-        SetInformationJobObject(job, 9, ref limits, Marshal.SizeOf(limits));
-        return job;
+        // A job without the kill flag would be useless, so hand back no job and let the assign in Connect() report it.
+        return SetInformationJobObject(job, 9, ref limits, Marshal.SizeOf(limits)) ? job : IntPtr.Zero;
     }
 
     // JOBOBJECT_EXTENDED_LIMIT_INFORMATION
@@ -324,7 +325,7 @@ class RouterViewerPC : Form
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateJobObject(IntPtr attrs, string name);
     [DllImport("kernel32.dll")] static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref JobLimits info, int size);
-    [DllImport("kernel32.dll")] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)] static extern int SetWindowTheme(IntPtr hwnd, string app, string idList);
 
