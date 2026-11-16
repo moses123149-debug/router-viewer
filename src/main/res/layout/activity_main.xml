@@ -138,6 +138,12 @@
                     android:textStyle="bold" />
 
                 <TextView
+                    android:id="@+id/tvProxy"
+                    style="@style/Label"
+                    android:layout_marginEnd="20dp"
+                    android:textSize="14sp" />
+
+                <TextView
                     android:id="@+id/tvTime2"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

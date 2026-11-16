@@ -158,6 +158,7 @@ public class MainActivity extends Activity {
             if (ticks % 5 == 0) {
                 if (hasWindowFocus()) hideSystemBars();
                 updateHotspotButton();
+                updateProxy();
                 updateRadio();
                 updateBattery();
                 updateDevices();
@@ -417,6 +418,15 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             startActivity(new Intent(Settings.ACTION_WIRELESS_SETTINGS));
         }
+    }
+
+    private void updateProxy() {
+        boolean on = hotspotOn();
+        Intent svc = new Intent(this, ProxyService.class);
+        if (on && ProxyService.address == null) startService(svc);
+        else if (!on && ProxyService.address != null) stopService(svc);
+        String a = ProxyService.address;
+        text(R.id.tvProxy, a == null ? "" : "SOCKS5 " + a + " · 연결 " + Socks5.active.get());
     }
 
     private void updateLockIcon() {
