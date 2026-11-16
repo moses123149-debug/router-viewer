@@ -13,9 +13,13 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -26,21 +30,41 @@ final class Socks5 {
     private Socks5() {}
 
     static final AtomicInteger active = new AtomicInteger();
+    private static final Set<Socket> open = ConcurrentHashMap.newKeySet();
+    static int maxSessions = 256;
+    static int handshakeMs = 10_000;
+    static int udpIdleMs = 300_000;
 
-    // ponytail: one thread per direction per connection; fine for a few browser clients, use NIO if it ever serves many
+    // ponytail: one thread per direction per connection, capped at maxSessions; use NIO if it ever serves many
     static void serve(ServerSocket server) {
         while (!server.isClosed()) {
             try {
                 Socket c = server.accept();
+                if (active.get() >= maxSessions) {
+                    c.close();
+                    continue;
+                }
+                active.incrementAndGet();
                 new Thread(() -> session(c)).start();
             } catch (IOException ignored) {
             }
         }
     }
 
+    /** Closes every client and outgoing TCP socket, which ends all sessions including UDP relays. */
+    static void closeAll() {
+        for (Socket s : open) {
+            try {
+                s.close();
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
     private static void session(Socket c) {
-        active.incrementAndGet();
+        open.add(c);
         try (Socket client = c) {
+            client.setSoTimeout(handshakeMs);
             DataInputStream in = new DataInputStream(client.getInputStream());
             OutputStream out = client.getOutputStream();
             if (in.readUnsignedByte() != 5) return;
@@ -64,7 +88,9 @@ final class Socks5 {
                 reply(out, 7);
                 return;
             }
-            try (Socket remote = new Socket()) {
+            Socket remote = new Socket();
+            open.add(remote);
+            try (Socket r = remote) {
                 try {
                     remote.connect(new InetSocketAddress(host, port), 10_000);
                 } catch (UnknownHostException e) {
@@ -75,21 +101,26 @@ final class Socks5 {
                     return;
                 }
                 reply(out, 0);
+                client.setSoTimeout(0);
                 Thread up = new Thread(() -> pump(client, remote));
                 up.start();
                 pump(remote, client);
                 up.join();
+            } finally {
+                open.remove(remote);
             }
         } catch (Exception ignored) {
         } finally {
+            open.remove(c);
             active.decrementAndGet();
         }
     }
 
-    /** UDP ASSOCIATE: relays datagrams for as long as the client keeps the control connection open. */
+    /** UDP ASSOCIATE: relays datagrams until the client closes the control connection or no datagram moves for udpIdleMs. */
     private static void associate(Socket client, InputStream in, OutputStream out) throws IOException {
         InetAddress owner = client.getInetAddress();
         AtomicReference<SocketAddress> peer = new AtomicReference<>();
+        AtomicLong last = new AtomicLong(System.currentTimeMillis());
         try (DatagramSocket relay = new DatagramSocket(0, client.getLocalAddress());
              DatagramSocket remote = new DatagramSocket()) {
             new Thread(() -> {
@@ -100,6 +131,7 @@ final class Socks5 {
                         p.setLength(buf.length);
                         relay.receive(p);
                         if (!p.getAddress().equals(owner)) continue;
+                        last.set(System.currentTimeMillis());
                         peer.set(p.getSocketAddress());
                         try {
                             DataInputStream d = new DataInputStream(new ByteArrayInputStream(buf, 0, p.getLength()));
@@ -122,6 +154,7 @@ final class Socks5 {
                     while (true) {
                         p.setLength(buf.length);
                         remote.receive(p);
+                        last.set(System.currentTimeMillis());
                         SocketAddress to = peer.get();
                         if (to == null) continue;
                         ByteArrayOutputStream b = new ByteArrayOutputStream();
@@ -134,7 +167,13 @@ final class Socks5 {
                 }
             }).start();
             reply(out, 0, relay.getLocalAddress(), relay.getLocalPort());
-            while (in.read() >= 0) {
+            client.setSoTimeout(Math.min(60_000, udpIdleMs));
+            while (true) {
+                try {
+                    if (in.read() < 0) return;
+                } catch (SocketTimeoutException e) {
+                    if (System.currentTimeMillis() - last.get() >= udpIdleMs) return;
+                }
             }
         }
     }
@@ -238,6 +277,49 @@ final class Socks5 {
                 }).start();
                 udpRoundTrip(proxy, udpEcho.getLocalPort());
             }
+
+            handshakeMs = 300;
+            try (Socket idle = new Socket(proxy.getInetAddress(), proxy.getLocalPort())) {
+                idle.setSoTimeout(3000);
+                check(idle.getInputStream().read() < 0, "silent client dropped after handshake timeout");
+            }
+            handshakeMs = 10_000;
+
+            awaitActive(0);
+            maxSessions = 1;
+            try (Socket first = new Socket(proxy.getInetAddress(), proxy.getLocalPort());
+                 Socket second = new Socket(proxy.getInetAddress(), proxy.getLocalPort())) {
+                second.setSoTimeout(3000);
+                check(second.getInputStream().read() < 0, "connection over the limit refused");
+            }
+            maxSessions = 256;
+
+            awaitActive(0);
+            try (Socket s = new Socket(proxy.getInetAddress(), proxy.getLocalPort())) {
+                s.setSoTimeout(3000);
+                DataInputStream in = new DataInputStream(s.getInputStream());
+                s.getOutputStream().write(new byte[] {5, 1, 0});
+                in.readUnsignedShort();
+                s.getOutputStream().write(ipv4);
+                in.readFully(new byte[10]);
+                awaitActive(1);
+                closeAll();
+                check(in.read() < 0, "closeAll ends a relaying session");
+            }
+
+            awaitActive(0);
+            udpIdleMs = 300;
+            try (Socket s = new Socket(proxy.getInetAddress(), proxy.getLocalPort())) {
+                s.setSoTimeout(3000);
+                DataInputStream in = new DataInputStream(s.getInputStream());
+                s.getOutputStream().write(new byte[] {5, 1, 0});
+                in.readUnsignedShort();
+                s.getOutputStream().write(new byte[] {5, 3, 0, 1, 0, 0, 0, 0, 0, 0});
+                in.readFully(new byte[10]);
+                check(in.read() < 0, "idle UDP relay closed");
+            }
+            udpIdleMs = 300_000;
+            awaitActive(0);
         }
         System.out.println("Socks5 OK");
         System.exit(0);
@@ -288,6 +370,11 @@ final class Socks5 {
             check(p.getLength() == msg.length, "UDP reply length");
             for (int i = 0; i < msg.length; i++) check(back[i] == msg[i], "UDP reply byte " + i);
         }
+    }
+
+    private static void awaitActive(int n) throws InterruptedException {
+        for (int i = 0; i < 100 && active.get() != n; i++) Thread.sleep(20);
+        check(active.get() == n, "active sessions " + active.get() + ", expected " + n);
     }
 
     private static void check(boolean ok, String what) {

@@ -71,6 +71,7 @@ public class MainActivity extends Activity {
     private RingView ring;
     private int ticks, calendarDay = -1;
     private long lastRx = -1, lastTx = -1, lastSpeedAt;
+    private boolean usageBusy;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -249,12 +250,24 @@ public class MainActivity extends Activity {
             ring.setFraction(0);
             return;
         }
+        if (usageBusy) return;
+        usageBusy = true;
         SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
-        int limitGb = p.getInt(LIMIT_GB, 100);
         long cycle = Calc.cycleStart(now, p.getInt(RESET_DAY, 1), TimeZone.getDefault());
-        long month = mobileBytes(this, cycle, now);
-        long today = mobileBytes(this, startOfDay(now), now);
+        long dayStart = startOfDay(now);
+        new Thread(() -> {
+            long month = mobileBytes(this, cycle, now);
+            long today = mobileBytes(this, dayStart, now);
+            runOnUiThread(() -> {
+                usageBusy = false;
+                showUsage(p, cycle, month, today);
+            });
+        }).start();
+    }
+
+    private void showUsage(SharedPreferences p, long cycle, long month, long today) {
         if (month < 0) return;
+        int limitGb = p.getInt(LIMIT_GB, 100);
         if (p.getLong(OFFSET_CYCLE, 0) == cycle) month = Math.max(0, month + p.getLong(OFFSET_BYTES, 0));
         double frac = month / (limitGb * GB);
         ring.setFraction((float) frac);
@@ -421,10 +434,7 @@ public class MainActivity extends Activity {
     }
 
     private void updateProxy() {
-        boolean on = hotspotOn();
-        Intent svc = new Intent(this, ProxyService.class);
-        if (on && ProxyService.address == null) startService(svc);
-        else if (!on && ProxyService.address != null) stopService(svc);
+        if (hotspotOn() && ProxyService.address == null) startService(new Intent(this, ProxyService.class));
         String a = ProxyService.address;
         text(R.id.tvProxy, a == null ? "" : "SOCKS5 " + a + " · 연결 " + Socks5.active.get());
     }

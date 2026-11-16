@@ -39,11 +39,14 @@ public class SettingsActivity extends Activity {
         long now = System.currentTimeMillis();
         SharedPreferences p = getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE);
         long cycle = Calc.cycleStart(now, p.getInt(MainActivity.RESET_DAY, 1), TimeZone.getDefault());
-        long measured = MainActivity.mobileBytes(this, cycle, now);
-        if (measured >= 0 && p.getLong(MainActivity.OFFSET_CYCLE, 0) == cycle) {
-            measured = Math.max(0, measured + p.getLong(MainActivity.OFFSET_BYTES, 0));
-        }
-        etUsed.setHint(measured >= 0 ? "현재 " + MainActivity.gb(measured) : "");
+        new Thread(() -> {
+            long m = MainActivity.mobileBytes(this, cycle, now);
+            if (m >= 0 && p.getLong(MainActivity.OFFSET_CYCLE, 0) == cycle) {
+                m = Math.max(0, m + p.getLong(MainActivity.OFFSET_BYTES, 0));
+            }
+            long measured = m;
+            runOnUiThread(() -> etUsed.setHint(measured >= 0 ? "현재 " + MainActivity.gb(measured) : ""));
+        }).start();
     }
 
     private int limit() {
@@ -60,19 +63,29 @@ public class SettingsActivity extends Activity {
                 .putInt(MainActivity.LIMIT_GB, limit())
                 .putInt(MainActivity.RESET_DAY, day);
         String used = etUsed.getText().toString().trim();
-        if (!used.isEmpty()) {
-            try {
-                long now = System.currentTimeMillis();
-                long cycle = Calc.cycleStart(now, day, TimeZone.getDefault());
-                long measured = MainActivity.mobileBytes(this, cycle, now);
-                if (measured >= 0) {
-                    e.putLong(MainActivity.OFFSET_BYTES, (long) (Double.parseDouble(used) * MainActivity.GB) - measured)
-                     .putLong(MainActivity.OFFSET_CYCLE, cycle);
-                }
-            } catch (NumberFormatException ignored) {
-            }
+        double usedGb;
+        try {
+            usedGb = used.isEmpty() ? -1 : Double.parseDouble(used);
+        } catch (NumberFormatException ex) {
+            usedGb = -1;
         }
-        e.apply();
-        finish();
+        if (usedGb < 0) {
+            e.apply();
+            finish();
+            return;
+        }
+        findViewById(R.id.btnSave).setEnabled(false);
+        double target = usedGb;
+        new Thread(() -> {
+            long now = System.currentTimeMillis();
+            long cycle = Calc.cycleStart(now, day, TimeZone.getDefault());
+            long measured = MainActivity.mobileBytes(this, cycle, now);
+            if (measured >= 0) {
+                e.putLong(MainActivity.OFFSET_BYTES, (long) (target * MainActivity.GB) - measured)
+                 .putLong(MainActivity.OFFSET_CYCLE, cycle);
+            }
+            e.apply();
+            runOnUiThread(this::finish);
+        }).start();
     }
 }

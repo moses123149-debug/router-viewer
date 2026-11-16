@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -34,6 +35,8 @@ class RouterViewerPC : Form
     readonly NotifyIcon tray = new NotifyIcon();
     Process box;
     bool stopping, closing, checking, exiting, hintShown;
+    bool? online;
+    int checks;
 
     RouterViewerPC()
     {
@@ -164,7 +167,8 @@ class RouterViewerPC : Form
             return;
         }
         box.BeginErrorReadLine();
-        SetStatus(Accent, "연결됨", "노트북의 모든 트래픽이 폰을 거칩니다");
+        online = null;
+        SetStatus(Dim, "연결 확인 중...", "폰을 거쳐 인터넷에 연결되는지 확인하는 중");
         SetButton(true);
         toggle.Enabled = true;
     }
@@ -182,7 +186,12 @@ class RouterViewerPC : Form
             GenerateConsoleCtrlEvent(0, 0);
             FreeConsole();
         }
-        if (!box.WaitForExit(5000)) box.Kill();
+        else Append("sing-box에 종료 신호를 보내지 못했습니다 (오류 " + Marshal.GetLastWin32Error() + ")");
+        if (!box.WaitForExit(5000))
+        {
+            Append("sing-box가 5초 안에 끝나지 않아 강제 종료했습니다");
+            box.Kill();
+        }
         SetConsoleCtrlHandler(IntPtr.Zero, false);
     }
 
@@ -200,11 +209,32 @@ class RouterViewerPC : Form
     {
         if (box == null || stopping || checking) return;
         checking = true;
-        bool ok = await Task.Run(() => Reachable());
+        bool phone = await Task.Run(() => Reachable());
+        if (!phone) online = null;
+        else if (online != true || ++checks % 3 == 0) online = await Task.Run(() => Online());
         checking = false;
         if (box == null || stopping || closing) return;
-        if (ok) SetStatus(Accent, "연결됨", "노트북의 모든 트래픽이 폰을 거칩니다");
-        else SetStatus(Bad, "폰 프록시 응답 없음", "인터넷이 멈춥니다. 핫스팟과 폰 앱을 확인하세요");
+        if (!phone) SetStatus(Bad, "폰 프록시 응답 없음", "인터넷이 멈춥니다. 핫스팟과 폰 앱을 확인하세요");
+        else if (online != true) SetStatus(Bad, "인터넷 안 됨", "폰은 응답하지만 모바일 데이터로 나가지 못합니다");
+        else SetStatus(Accent, "연결됨", "노트북의 모든 트래픽이 폰을 거칩니다");
+    }
+
+    // Goes the normal route (TUN, sing-box, phone, mobile data), so a 204 means the whole path works.
+    static bool Online()
+    {
+        try
+        {
+            var r = (HttpWebRequest)WebRequest.Create("http://connectivitycheck.gstatic.com/generate_204");
+            r.Proxy = null;
+            r.Timeout = 5000;
+            r.ReadWriteTimeout = 5000;
+            r.KeepAlive = false;
+            using (var resp = (HttpWebResponse)r.GetResponse()) return resp.StatusCode == HttpStatusCode.NoContent;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     void Ui(Action a)
@@ -243,7 +273,7 @@ class RouterViewerPC : Form
         }
     }
 
-    [DllImport("kernel32.dll")] static extern bool AttachConsole(uint pid);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool AttachConsole(uint pid);
     [DllImport("kernel32.dll")] static extern bool FreeConsole();
     [DllImport("kernel32.dll")] static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add);
     [DllImport("kernel32.dll")] static extern bool GenerateConsoleCtrlEvent(uint ctrlEvent, uint groupId);
