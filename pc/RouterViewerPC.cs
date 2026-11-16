@@ -15,21 +15,51 @@ class RouterViewerPC : Form
     const string Phone = "192.168.43.1";
     const int Port = 1080;
 
-    readonly Label status = new Label { Dock = DockStyle.Top, Height = 48, Font = new Font("Malgun Gothic", 13f), TextAlign = ContentAlignment.MiddleCenter };
-    readonly Button toggle = new Button { Dock = DockStyle.Top, Height = 44, Font = new Font("Malgun Gothic", 11f), Text = "연결" };
-    readonly TextBox log = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 8.5f) };
-    const string Connected = "연결됨: 노트북 전체가 폰을 거칩니다";
+    // Same palette as the phone app (src/main/res/values/colors.xml).
+    static readonly Color Bg = Color.FromArgb(0x00, 0x00, 0x00);
+    static readonly Color Card = Color.FromArgb(0x11, 0x13, 0x15);
+    static readonly Color Line = Color.FromArgb(0x2A, 0x2E, 0x32);
+    static readonly Color Fg = Color.FromArgb(0xF2, 0xF2, 0xF2);
+    static readonly Color Dim = Color.FromArgb(0xA8, 0xAE, 0xB4);
+    static readonly Color Off = Color.FromArgb(0x5A, 0x60, 0x66);
+    static readonly Color Accent = Color.FromArgb(0xFF, 0xB4, 0x54);
+    static readonly Color Bad = Color.FromArgb(0xFF, 0x8A, 0x80);
+
+    readonly Label dot = new Label { Location = new Point(14, 14), Size = new Size(26, 32), Font = new Font("Malgun Gothic", 14f), Text = "●" };
+    readonly Label title = new Label { Location = new Point(42, 14), Size = new Size(320, 32), ForeColor = Fg, Font = new Font("Malgun Gothic", 15f, FontStyle.Bold) };
+    readonly Label detail = new Label { Location = new Point(44, 50), Size = new Size(320, 22), ForeColor = Dim, Font = new Font("Malgun Gothic", 9.5f) };
+    readonly Button toggle = new Button { Location = new Point(20, 164), Size = new Size(380, 46), FlatStyle = FlatStyle.Flat, Font = new Font("Malgun Gothic", 11.5f, FontStyle.Bold), Cursor = Cursors.Hand };
+    readonly TextBox log = new TextBox { Location = new Point(20, 250), Size = new Size(380, 90), Multiline = true, ReadOnly = true, BorderStyle = BorderStyle.None, BackColor = Card, ForeColor = Dim, Font = new Font("Consolas", 8.5f), ScrollBars = ScrollBars.Vertical };
     readonly Timer timer = new Timer { Interval = 5000 };
     Process box;
     bool stopping, closing, checking;
 
     RouterViewerPC()
     {
+        SuspendLayout();
+        AutoScaleDimensions = new SizeF(96f, 96f);
+        AutoScaleMode = AutoScaleMode.Dpi;
         Text = "Router Viewer PC";
-        ClientSize = new Size(460, 320);
-        Controls.Add(log);
-        Controls.Add(toggle);
-        Controls.Add(status);
+        Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        BackColor = Bg;
+        ForeColor = Fg;
+        FormBorderStyle = FormBorderStyle.FixedSingle;
+        MaximizeBox = false;
+        ClientSize = new Size(420, 360);
+
+        var logo = new PictureBox { Location = new Point(20, 18), Size = new Size(28, 28), SizeMode = PictureBoxSizeMode.Zoom, Image = Icon.ToBitmap() };
+        var name = new Label { Location = new Point(56, 20), AutoSize = true, ForeColor = Fg, Font = new Font("Malgun Gothic", 12f, FontStyle.Bold), Text = "Router Viewer PC" };
+        var proxy = new Label { Location = new Point(250, 24), Size = new Size(150, 20), ForeColor = Off, Font = new Font("Malgun Gothic", 9f), TextAlign = ContentAlignment.TopRight, Text = Phone + ":" + Port };
+        var card = new Panel { Location = new Point(20, 64), Size = new Size(380, 86), BackColor = Card };
+        card.Controls.AddRange(new Control[] { dot, title, detail });
+        var logTitle = new Label { Location = new Point(20, 226), AutoSize = true, ForeColor = Off, Font = new Font("Malgun Gothic", 9f), Text = "기록" };
+        Controls.AddRange(new Control[] { logo, name, proxy, card, toggle, logTitle, log });
+        ResumeLayout(false);
+        PerformLayout();
+
+        log.HandleCreated += (s, e) => SetWindowTheme(log.Handle, "DarkMode_Explorer", null);
+        SetStatus(Off, "연결 안 됨", "아래 버튼을 눌러 연결하세요");
+        SetButton(false);
         toggle.Click += (s, e) => { if (box == null) Connect(); else Disconnect(); };
         Shown += (s, e) => Connect();
         FormClosing += (s, e) => { closing = true; Disconnect(); };
@@ -37,17 +67,41 @@ class RouterViewerPC : Form
         timer.Start();
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        int dark = 1;
+        DwmSetWindowAttribute(Handle, 20, ref dark, 4);
+    }
+
+    void SetStatus(Color c, string head, string sub)
+    {
+        dot.ForeColor = c;
+        title.Text = head;
+        detail.Text = sub;
+    }
+
+    void SetButton(bool connected)
+    {
+        toggle.Text = connected ? "연결 끊기" : "연결";
+        toggle.BackColor = connected ? Card : Accent;
+        toggle.ForeColor = connected ? Fg : Bg;
+        toggle.FlatAppearance.BorderColor = connected ? Line : Accent;
+        toggle.FlatAppearance.BorderSize = 1;
+        toggle.FlatAppearance.MouseOverBackColor = connected ? Line : Color.FromArgb(0xFF, 0xC4, 0x78);
+        toggle.FlatAppearance.MouseDownBackColor = toggle.FlatAppearance.MouseOverBackColor;
+    }
+
     async void Connect()
     {
         toggle.Enabled = false;
-        status.Text = "폰 프록시 확인 중...";
+        SetStatus(Dim, "폰 프록시 확인 중...", Phone + ":" + Port + "에 연결하는 중");
         bool reachable = await Task.Run(() => Reachable());
         if (closing) return;
         if (!reachable)
         {
-            status.Text = "폰 프록시에 연결할 수 없음";
-            Append("핫스팟에 연결되어 있는지, 폰에서 Router Viewer 앱이 떠 있고 프록시가 켜져 있는지 확인하세요.");
-            toggle.Text = "연결";
+            SetStatus(Bad, "폰 프록시에 연결할 수 없음", "핫스팟 연결과 폰 앱의 프록시를 확인하세요");
+            SetButton(false);
             toggle.Enabled = true;
             return;
         }
@@ -73,15 +127,15 @@ class RouterViewerPC : Form
         catch (Exception ex)
         {
             box = null;
-            status.Text = "sing-box 실행 실패";
+            SetStatus(Bad, "sing-box 실행 실패", "아래 기록을 확인하세요");
             Append(ex.Message);
-            toggle.Text = "연결";
+            SetButton(false);
             toggle.Enabled = true;
             return;
         }
         box.BeginErrorReadLine();
-        status.Text = Connected;
-        toggle.Text = "연결 끊기";
+        SetStatus(Accent, "연결됨", "노트북의 모든 트래픽이 폰을 거칩니다");
+        SetButton(true);
         toggle.Enabled = true;
     }
 
@@ -90,7 +144,7 @@ class RouterViewerPC : Form
         if (box == null || box.HasExited) return;
         stopping = true;
         toggle.Enabled = false;
-        status.Text = "끊는 중...";
+        SetStatus(Dim, "끊는 중...", "원래 연결로 되돌리는 중");
         // Ctrl+C lets sing-box remove its routes and firewall rules; Kill would skip that.
         if (AttachConsole((uint)box.Id))
         {
@@ -105,10 +159,22 @@ class RouterViewerPC : Form
     void Exited()
     {
         box = null;
-        status.Text = stopping ? "연결 끊김" : "연결이 끊어졌습니다 (아래 기록 참고)";
+        if (stopping) SetStatus(Off, "연결 끊김", "핫스팟으로 직접 연결됩니다");
+        else SetStatus(Bad, "연결이 끊어졌습니다", "아래 기록을 확인하세요");
         stopping = false;
-        toggle.Text = "연결";
+        SetButton(false);
         toggle.Enabled = true;
+    }
+
+    async void Check()
+    {
+        if (box == null || stopping || checking) return;
+        checking = true;
+        bool ok = await Task.Run(() => Reachable());
+        checking = false;
+        if (box == null || stopping || closing) return;
+        if (ok) SetStatus(Accent, "연결됨", "노트북의 모든 트래픽이 폰을 거칩니다");
+        else SetStatus(Bad, "폰 프록시 응답 없음", "인터넷이 멈춥니다. 핫스팟과 폰 앱을 확인하세요");
     }
 
     void Ui(Action a)
@@ -125,16 +191,6 @@ class RouterViewerPC : Form
     void Append(string line)
     {
         log.AppendText(Regex.Replace(line, @"\x1b\[[0-9;]*m", "") + "\r\n");
-    }
-
-    async void Check()
-    {
-        if (box == null || stopping || checking) return;
-        checking = true;
-        bool ok = await Task.Run(() => Reachable());
-        checking = false;
-        if (box == null || stopping || closing) return;
-        status.Text = ok ? Connected : "폰 프록시 응답 없음: 핫스팟과 폰 앱을 확인하세요";
     }
 
     // A real SOCKS5 greeting, because while connected a bare TCP connect could be answered by sing-box itself.
@@ -161,6 +217,8 @@ class RouterViewerPC : Form
     [DllImport("kernel32.dll")] static extern bool FreeConsole();
     [DllImport("kernel32.dll")] static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add);
     [DllImport("kernel32.dll")] static extern bool GenerateConsoleCtrlEvent(uint ctrlEvent, uint groupId);
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)] static extern int SetWindowTheme(IntPtr hwnd, string app, string idList);
 
     [STAThread]
     static void Main()

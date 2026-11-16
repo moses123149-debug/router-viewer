@@ -158,7 +158,8 @@ src/main/res/            레이아웃, 아이콘, 색상
 pc/
   config.json            노트북 전체를 폰 프록시로 보내는 sing-box 설정
   RouterViewerPC.cs      연결·끊기 창 프로그램 (sing-box 실행·종료, 폰 프록시 확인)
-  app.manifest           관리자 권한 요청
+  app.manifest           관리자 권한 요청, 고해상도 화면 대응
+  icon.ico               폰 앱과 같은 아이콘
   build.bat              RouterViewerPC.exe 빌드
 ```
 
