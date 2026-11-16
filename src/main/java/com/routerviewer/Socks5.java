@@ -45,7 +45,7 @@ final class Socks5 {
                     continue;
                 }
                 active.incrementAndGet();
-                new Thread(() -> session(c)).start();
+                new Thread(() -> session(c, server)).start();
             } catch (IOException ignored) {
             }
         }
@@ -61,9 +61,11 @@ final class Socks5 {
         }
     }
 
-    private static void session(Socket c) {
+    private static void session(Socket c, ServerSocket server) {
         open.add(c);
         try (Socket client = c) {
+            // Callers close the server before closeAll(), so a session registered too late for closeAll() sees it closed here.
+            if (server.isClosed()) return;
             client.setSoTimeout(handshakeMs);
             DataInputStream in = new DataInputStream(client.getInputStream());
             OutputStream out = client.getOutputStream();
@@ -319,6 +321,17 @@ final class Socks5 {
                 check(in.read() < 0, "idle UDP relay closed");
             }
             udpIdleMs = 300_000;
+            awaitActive(0);
+
+            try (ServerSocket late = new ServerSocket(0, 1, lo);
+                 Socket s = new Socket(lo, late.getLocalPort())) {
+                Socket c = late.accept();
+                late.close();
+                active.incrementAndGet();
+                new Thread(() -> session(c, late)).start();
+                s.setSoTimeout(3000);
+                check(s.getInputStream().read() < 0, "session accepted while stopping is closed");
+            }
             awaitActive(0);
         }
         System.out.println("Socks5 OK");

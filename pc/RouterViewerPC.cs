@@ -166,6 +166,7 @@ class RouterViewerPC : Form
             toggle.Enabled = true;
             return;
         }
+        AssignProcessToJobObject(Job, box.Handle);
         box.BeginErrorReadLine();
         online = null;
         SetStatus(Dim, "연결 확인 중...", "폰을 거쳐 인터넷에 연결되는지 확인하는 중");
@@ -210,16 +211,35 @@ class RouterViewerPC : Form
         if (box == null || stopping || checking) return;
         checking = true;
         bool phone = await Task.Run(() => Reachable());
-        if (!phone) online = null;
+        bool tun = phone && ViaTun();
+        if (!tun) online = null;
         else if (online != true || ++checks % 3 == 0) online = await Task.Run(() => Online());
         checking = false;
         if (box == null || stopping || closing) return;
         if (!phone) SetStatus(Bad, "폰 프록시 응답 없음", "인터넷이 멈춥니다. 핫스팟과 폰 앱을 확인하세요");
+        else if (!tun) SetStatus(Bad, "프록시를 거치지 않음", "트래픽이 TUN으로 가지 않습니다 (다른 VPN 확인)");
         else if (online != true) SetStatus(Bad, "인터넷 안 됨", "폰은 응답하지만 모바일 데이터로 나가지 못합니다");
         else SetStatus(Accent, "연결됨", "노트북의 모든 트래픽이 폰을 거칩니다");
     }
 
-    // Goes the normal route (TUN, sing-box, phone, mobile data), so a 204 means the whole path works.
+    // Source address Windows picks for an internet destination (no packet is sent); must match the tun address in config.json.
+    static bool ViaTun()
+    {
+        try
+        {
+            using (var u = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
+            {
+                u.Connect("8.8.8.8", 53);
+                return ((IPEndPoint)u.LocalEndPoint).Address.ToString().StartsWith("172.19.0.");
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // Checked only after ViaTun(), so this goes TUN, sing-box, phone, mobile data and a 204 means the whole path works.
     static bool Online()
     {
         try
@@ -277,6 +297,34 @@ class RouterViewerPC : Form
     [DllImport("kernel32.dll")] static extern bool FreeConsole();
     [DllImport("kernel32.dll")] static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add);
     [DllImport("kernel32.dll")] static extern bool GenerateConsoleCtrlEvent(uint ctrlEvent, uint groupId);
+    // Kill-on-close job: if this app dies, Windows ends sing-box too instead of leaving it holding the routes.
+    static readonly IntPtr Job = KillOnCloseJob();
+
+    static IntPtr KillOnCloseJob()
+    {
+        IntPtr job = CreateJobObject(IntPtr.Zero, null);
+        var limits = new JobLimits { LimitFlags = 0x2000 };
+        SetInformationJobObject(job, 9, ref limits, Marshal.SizeOf(limits));
+        return job;
+    }
+
+    // JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+    [StructLayout(LayoutKind.Sequential)]
+    struct JobLimits
+    {
+        public long PerProcessUserTimeLimit, PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize, MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass, SchedulingClass;
+        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount, ReadTransferCount, WriteTransferCount, OtherTransferCount;
+        public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateJobObject(IntPtr attrs, string name);
+    [DllImport("kernel32.dll")] static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref JobLimits info, int size);
+    [DllImport("kernel32.dll")] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)] static extern int SetWindowTheme(IntPtr hwnd, string app, string idList);
 
